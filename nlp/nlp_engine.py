@@ -1,21 +1,37 @@
-import re
+import ollama
+from db.valid_queries import valid_queries
 
 def parse_query(user_input: str):
-    user_input = user_input.lower()
+    """
+    Use the local LLM to classify the user's intent and map it to a valid SQL query.
+    """
+    # Define the format for prompting the model
+    prompt = f"""
+You are a helpful assistant that maps user questions to database intents. Only choose from the following intents:
 
-    if "show me all users" in user_input or "list users" in user_input:
-        return "SELECT * FROM users"
+{list(valid_queries.keys())}
 
-    elif "signed up last week" in user_input:
-        return "SELECT * FROM users WHERE signup_date >= date('now', '-7 day')"
+User question: "{user_input}"
 
-    elif "products in stock" in user_input:
-        return "SELECT COUNT(*) as total FROM products WHERE stock > 0"
+Respond with only the matching intent name.
+"""
 
-    elif "add a new user" in user_input:
-        match = re.search(r"named (\w+).*email (\S+)", user_input)
-        if match:
-            name, email = match.groups()
-            return ("INSERT INTO users (name, email, signup_date) VALUES (?, ?, date('now'))", (name, email))
+    try:
+        # Proper call to Ollama chat
+        response = ollama.chat(
+            model="gemma2:2b",  # make sure the model name matches what Ollama provides locally
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    return None
+        generated_intent = response["message"]["content"].strip().lower()
+        print("LLM responded with intent:", generated_intent)
+
+        # Match to one of the valid queries
+        for intent, query in valid_queries.items():
+            if intent in generated_intent:
+                return query
+
+    except Exception as e:
+        print(f"Error during parsing: {e}")
+
+    return None  # fallback if no match
