@@ -1,37 +1,81 @@
+import json
 import ollama
 from db.valid_queries import valid_queries
+import re
 
 def parse_query(user_input: str):
     """
-    Use the local LLM to classify the user's intent and map it to a valid SQL query.
+    Use LLM to classify intent and extract variables for fine-grained SQL queries.
     """
-    # Define the format for prompting the model
     prompt = f"""
-You are a helpful assistant that maps user questions to database intents. Only choose from the following intents:
+You are a database assistant. Based on the user question, identify:
+1. The intent (only one of these): {list(valid_queries.keys())}
+2. The required parameters: table name, column name, condition, or row range
 
-{list(valid_queries.keys())}
+Respond only in compact JSON format like:
+{{
+  "intent": "...",
+  "table": "...",
+  "column": "...",
+  "condition": "...",
+  "start": 1,
+  "end": 3
+}}
 
-User question: "{user_input}"
-
-Respond with only the matching intent name.
+Question: "{user_input}"
 """
 
     try:
-        # Proper call to Ollama chat
+        # Send prompt to Ollama model
         response = ollama.chat(
-            model="gemma2:2b",  # make sure the model name matches what Ollama provides locally
+            model="gemma2:2b",
             messages=[{"role": "user", "content": prompt}]
         )
+        
+        # Get raw response message
+        message = response['message']['content']
+        print("🧠 Raw LLM Output:", message)
 
-        generated_intent = response["message"]["content"].strip().lower()
-        print("LLM responded with intent:", generated_intent)
+        # Clean the output by removing triple backticks and 'json' keyword if present
+        cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", message).strip()
 
-        # Match to one of the valid queries
-        for intent, query in valid_queries.items():
-            if intent in generated_intent:
-                return query
+        # Try to parse the cleaned message into JSON
+        try:
+            parsed = json.loads(cleaned.lower())
+        except json.JSONDecodeError:
+            print("⚠️ Failed to parse LLM output as JSON:", cleaned)
+            return None
+
+        # Extract the required components from the parsed response
+        intent = parsed.get("intent")
+        table = parsed.get("table", "").strip()
+        column = parsed.get("column", "*").strip()
+        condition = parsed.get("condition", "1=1").strip()
+        start = parsed.get("start", 1)
+        end = parsed.get("end", 3)
+
+        # Check for essential fields like table and intent
+        if not table or not intent:
+            print(f"❌ Missing table or intent. Parsed response: {parsed}")
+            return None
+
+        query_template = valid_queries.get(intent)
+
+        if query_template:
+            # Construct the SQL query from the template
+            sql = query_template.format(
+                column=column,
+                table=table,
+                condition=condition,
+                start=start,
+                end=end
+            )
+            print("✅ Final SQL:", sql)
+            return sql
+        else:
+            print(f"❌ No valid query template found for intent: {intent}")
+            return None
 
     except Exception as e:
-        print(f"Error during parsing: {e}")
-
-    return None  # fallback if no match
+        print(f"❌ Error during parsing: {e}")
+        return None
