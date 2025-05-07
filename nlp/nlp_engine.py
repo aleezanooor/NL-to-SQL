@@ -31,38 +31,37 @@ Question: "{user_input}"
             model="gemma2:2b",
             messages=[{"role": "user", "content": prompt}]
         )
-        
+
         # Get raw response message
         message = response['message']['content']
         print("🧠 Raw LLM Output:", message)
 
-        # Clean the output by removing triple backticks and 'json' keyword if present
+        # Clean up markdown-style formatting if present
         cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", message).strip()
 
-        # Try to parse the cleaned message into JSON
+        # Parse the cleaned message into JSON
         try:
             parsed = json.loads(cleaned.lower())
         except json.JSONDecodeError:
             print("⚠️ Failed to parse LLM output as JSON:", cleaned)
             return None
 
-        # Extract the required components from the parsed response
+        # Extract components safely
         intent = parsed.get("intent")
-        table = parsed.get("table", "").strip()
-        column = parsed.get("column", "*").strip()
-        condition = parsed.get("condition", "1=1").strip()
+        table = (parsed.get("table") or "").strip()
+        column = (parsed.get("column") or "*").strip()
+        condition = (parsed.get("condition") or "1=1").strip()
         start = parsed.get("start", 1)
         end = parsed.get("end", 3)
 
-        # Check for essential fields like table and intent
+        # Check for essential fields
         if not table or not intent:
             print(f"❌ Missing table or intent. Parsed response: {parsed}")
             return None
 
+        # Retrieve the query template and build the SQL
         query_template = valid_queries.get(intent)
-
         if query_template:
-            # Construct the SQL query from the template
             sql = query_template.format(
                 column=column,
                 table=table,

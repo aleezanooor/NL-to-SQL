@@ -9,8 +9,8 @@ valid_queries = {
     "range_rows": "SELECT * FROM {table} LIMIT {end} OFFSET {start}",
     "count_products_in_stock": "SELECT COUNT(*) FROM products WHERE stock > 0;",
     "show_products_in_stock": "SELECT * FROM products WHERE stock > 0;",
-    # "add_user": (
-    #     "INSERT INTO users (name, email, signup_date) VALUES (?, ?, date('now'))",
-    #     ("John Doe", "john@example.com")  # Default params for example
-    # ),
+    "add_user": (
+        "INSERT INTO users (name, email, signup_date) VALUES (?, ?, date('now'))",
+        ("John Doe", "john@example.com")  # Default params for example
+    ),
 }
